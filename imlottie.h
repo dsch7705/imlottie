@@ -27,8 +27,12 @@
 #include <queue>
 #include <string>
 #include <unordered_map>
+#include <memory>
+#include <atomic>
+#include <thread>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #ifdef IMLOTTIE_DX11_IMPLEMENTATION
 #include <d3d11.h>
@@ -614,13 +618,14 @@ void destroy() {
     detail::g_lottieRenderer = nullptr;
 }
 
-
-template<typename ... Args>
-void sync(Args... args) {
-    if (detail::g_lottieRenderer) {
-        detail::g_lottieRenderer->uploadReadyFramesToSysTex(args...);
-    }
-} 
+#ifdef IMLOTTIE_DX11_IMPLEMENTATION
+    template<typename ... Args>
+    void sync(Args... args) {
+        if (detail::g_lottieRenderer) {
+            detail::g_lottieRenderer->uploadReadyFramesToSysTex(args...);
+        }
+    } 
+#endif
 
 #ifdef IMLOTTIE_DEMO
 void demoAnimations(const std::string &demo_folder) {

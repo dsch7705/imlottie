@@ -2217,6 +2217,7 @@ public:
 };
 
 struct Operator;
+struct VSpanData;
 typedef void (*CompositionFunctionSolid)(uint32_t *dest, int length, uint32_t color, uint32_t const_alpha);
 typedef void (*CompositionFunction)(uint32_t *dest, const uint32_t *src, int length, uint32_t const_alpha);
 typedef void (*SourceFetchProc)(uint32_t *buffer, const Operator *o, const VSpanData *data, int y, int x, int length);
@@ -2749,6 +2750,12 @@ struct LOTModelStat
 
 };
 
+template<typename T>
+inline T lerp(const T& start, const T& end, float t)
+{
+    return start + t * (end - start);
+}
+
 template <typename T>
 struct LOTKeyFrameValue {
     T mStartValue;
@@ -2826,42 +2833,42 @@ public:
     using PointFunc = std::function<Point(const imlottie::FrameInfo &)>;
     using SizeFunc = std::function<Size(const imlottie::FrameInfo &)>;
 
-    LOTVariant(imlottie::Property prop, const ValueFunc &v):mPropery(prop), mTag(Value)
+    LOTVariant(imlottie::Property prop, const ValueFunc &v):mPropery(prop), mTag(Type::Value)
     {
         construct(impl.valueFunc, v);
     }
 
-    LOTVariant(imlottie::Property prop, ValueFunc &&v):mPropery(prop), mTag(Value)
+    LOTVariant(imlottie::Property prop, ValueFunc &&v):mPropery(prop), mTag(Type::Value)
     {
         moveConstruct(impl.valueFunc, std::move(v));
     }
 
-    LOTVariant(imlottie::Property prop, const ColorFunc &v):mPropery(prop), mTag(Color)
+    LOTVariant(imlottie::Property prop, const ColorFunc &v):mPropery(prop), mTag(Type::Color)
     {
         construct(impl.colorFunc, v);
     }
 
-    LOTVariant(imlottie::Property prop, ColorFunc &&v):mPropery(prop), mTag(Color)
+    LOTVariant(imlottie::Property prop, ColorFunc &&v):mPropery(prop), mTag(Type::Color)
     {
         moveConstruct(impl.colorFunc, std::move(v));
     }
 
-    LOTVariant(imlottie::Property prop, const PointFunc &v):mPropery(prop), mTag(Point)
+    LOTVariant(imlottie::Property prop, const PointFunc &v):mPropery(prop), mTag(Type::Point)
     {
         construct(impl.pointFunc, v);
     }
 
-    LOTVariant(imlottie::Property prop, PointFunc &&v):mPropery(prop), mTag(Point)
+    LOTVariant(imlottie::Property prop, PointFunc &&v):mPropery(prop), mTag(Type::Point)
     {
         moveConstruct(impl.pointFunc, std::move(v));
     }
 
-    LOTVariant(imlottie::Property prop, const SizeFunc &v):mPropery(prop), mTag(Size)
+    LOTVariant(imlottie::Property prop, const SizeFunc &v):mPropery(prop), mTag(Type::Size)
     {
         construct(impl.sizeFunc, v);
     }
 
-    LOTVariant(imlottie::Property prop, SizeFunc &&v):mPropery(prop), mTag(Size)
+    LOTVariant(imlottie::Property prop, SizeFunc &&v):mPropery(prop), mTag(Type::Size)
     {
         moveConstruct(impl.sizeFunc, std::move(v));
     }
@@ -2870,25 +2877,25 @@ public:
 
     const ColorFunc& color() const
     {
-        assert(mTag == Color);
+        assert(mTag == Type::Color);
         return impl.colorFunc;
     }
 
     const ValueFunc& value() const
     {
-        assert(mTag == Value);
+        assert(mTag == Type::Value);
         return impl.valueFunc;
     }
 
     const PointFunc& point() const
     {
-        assert(mTag == Point);
+        assert(mTag == Type::Point);
         return impl.pointFunc;
     }
 
     const SizeFunc& size() const
     {
-        assert(mTag == Size);
+        assert(mTag == Type::Size);
         return impl.sizeFunc;
     }
 
@@ -2931,7 +2938,7 @@ private:
         }
         mTag = other.mTag;
         mPropery = other.mPropery;
-        other.mTag = MonoState;
+        other.mTag = Type::MonoState;
     }
 
     void Copy(const LOTVariant& other)
@@ -2959,31 +2966,31 @@ private:
     void Destroy()
     {
         switch(mTag) {
-        case MonoState: {
+        case Type::MonoState: {
             break;
         }
-        case Value: {
+        case Type::Value: {
             impl.valueFunc.~ValueFunc();
             break;
         }
-        case Color: {
+        case Type::Color: {
             impl.colorFunc.~ColorFunc();
             break;
         }
-        case Point: {
+        case Type::Point: {
             impl.pointFunc.~PointFunc();
             break;
         }
-        case Size: {
+        case Type::Size: {
             impl.sizeFunc.~SizeFunc();
             break;
         }
         }
     }
 
-    enum Type {MonoState, Value, Color, Point , Size};
+    enum class Type {MonoState, Value, Color, Point , Size};
     imlottie::Property mPropery;
-    Type              mTag{MonoState};
+    Type              mTag{Type::MonoState};
     union details{
         ColorFunc   colorFunc;
         ValueFunc   valueFunc;
@@ -3758,12 +3765,6 @@ inline const LottieColor operator*(const LottieColor &c, float m)
 
 inline const LottieColor operator*(float m, const LottieColor &c)
 { return LottieColor(c.r*m, c.g*m, c.b*m); }
-
-template<typename T>
-inline T lerp(const T& start, const T& end, float t)
-{
-    return start + t * (end - start);
-}
 
 template <>
 struct LOTKeyFrameValue<VPointF>
