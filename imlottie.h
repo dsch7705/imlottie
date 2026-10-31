@@ -87,11 +87,14 @@ struct LottieAnim {
     // A unique identifier for the picture
     ImGuiID pid = BAD_PICTUREID;
 
-#ifdef IMLOTTIE_DX11_IMPLEMENTATION
+#if defined (IMLOTTIE_DX11_IMPLEMENTATION)
     // DirectX 11 implementation
     ID3D11Texture2D* texture = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
-#endif // IMLOTTIE_DX11_IMPLEMENTATION
+#elif defined (IMLOTTIE_OPENGL_IMPLEMENTATION)
+    GLuint texture = 0;
+#endif
+
     struct {
         int width = DEFAULT_SIZE;
         int height = DEFAULT_SIZE;
@@ -241,7 +244,7 @@ struct LottieAnim {
 }
 
     // Simple helper function to load an image into a DX11 texture with common settings
-#ifdef IMLOTTIE_DX11_IMPLEMENTATION
+#if defined (IMLOTTIE_DX11_IMPLEMENTATION)
     bool createTextureFromData(uint8_t *image_data, ::ID3D11Device* pd3dDevice) {
         if (image_data == NULL) {
             return false;
@@ -303,7 +306,22 @@ struct LottieAnim {
         ctx->Unmap(texture, 0);
         return true;
     }
-#endif // IMLOTTIE_DX11_IMPLEMENTATION
+#elif defined IMLOTTIE_OPENGL_IMPLEMENTATION
+    bool updateTextureFromData(uint8_t *image_data) {
+        if (image_data == nullptr) {
+            return false;
+        }
+
+        if (texture == 0) {
+            glGenTextures(1, &texture);
+        }
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvas.width, canvas.height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, canvas.width, canvas.height, GL_BGRA, GL_UNSIGNED_BYTE, image_data);
+
+        return true;
+    }
+#endif
 };
 
 struct LottieRenderCommand {
@@ -545,7 +563,7 @@ struct LottieAnimationRenderer {
         }
     }
 
-#ifdef IMLOTTIE_DX11_IMPLEMENTATION
+#if defined (IMLOTTIE_DX11_IMPLEMENTATION)
     void uploadReadyFramesToSysTex(ID3D11Device *pd3dDevice, ID3D11DeviceContext* ctx) {
         // prepared frames stored in readyFrames array now (in system memory)
         // but need move those to gpu memory with textures
@@ -566,7 +584,28 @@ struct LottieAnimationRenderer {
 
         renderThread.curtime = (float)ImGui::GetTime() * 1000.f;
     }
-#endif // IMLOTTIE_DX11_IMPLEMENTATION
+#elif defined (IMLOTTIE_OPENGL_IMPLEMENTATION)
+    void uploadReadyFramesToSysTex() {
+        // prepared frames stored in readyFrames array now (in system memory)
+        // but need move those to gpu memory with textures
+        ReadyFrame readyFrame;
+        while (renderThread.popReadyFrame(readyFrame)) {
+            const auto &it = renderThread.animations.find(readyFrame.pid);
+
+            if (!it->second.texture) {
+                it->second.updateTextureFromData(readyFrame.data.data());
+                auto rit = std::find_if(animationsPresent.begin(), animationsPresent.end(), [pid = it->second.pid] (auto &a) { return a.second.pid == pid; });
+                if (rit != animationsPresent.end())
+                    rit->second.srv = reinterpret_cast<void*>(it->second.texture);
+                break;
+            } else {
+                it->second.updateTextureFromData(readyFrame.data.data());
+            }
+        }
+
+        renderThread.curtime = (float)ImGui::GetTime() * 1000.f;
+    }
+#endif
 
     LottieAnimationRenderer() {
         std::thread independedThread([this] () { renderThread.execute(); });
@@ -618,14 +657,12 @@ void destroy() {
     detail::g_lottieRenderer = nullptr;
 }
 
-#ifdef IMLOTTIE_DX11_IMPLEMENTATION
-    template<typename ... Args>
-    void sync(Args... args) {
-        if (detail::g_lottieRenderer) {
-            detail::g_lottieRenderer->uploadReadyFramesToSysTex(args...);
-        }
-    } 
-#endif
+template<typename ... Args>
+void sync(Args... args) {
+    if (detail::g_lottieRenderer) {
+        detail::g_lottieRenderer->uploadReadyFramesToSysTex(args...);
+    }
+} 
 
 #ifdef IMLOTTIE_DEMO
 void demoAnimations(const std::string &demo_folder) {
